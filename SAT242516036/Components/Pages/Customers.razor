@@ -1,0 +1,165 @@
+﻿@page "/customers"
+@rendermode InteractiveServer
+@using DbContexts
+@using Microsoft.EntityFrameworkCore
+@using MyDbModels
+@using YourProjectNamespace.Models
+@* Burada YourProjectNamespace.Models yerine Program.cs'deki MyDbModels'i kullandım *@
+
+@* DİKKAT: Artık Context yerine Factory enjekte ediyoruz *@
+@inject IDbContextFactory<MyDbModel_DbContext> DbFactory
+
+<h3 class="mb-3">Müşteri Yönetimi</h3>
+
+@if (customers == null)
+{
+    <p>Yükleniyor...</p>
+}
+else
+{
+    <div class="mb-3">
+        <h4>@(isEdit ? "Müşteri Güncelle" : "Yeni Müşteri Ekle")</h4>
+
+        <EditForm Model="customerModel" OnValidSubmit="SaveCustomer">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-2">
+                <label>Ad:</label>
+                <InputText class="form-control" @bind-Value="customerModel.FirstName" />
+            </div>
+
+            <div class="mb-2">
+                <label>Soyad:</label>
+                <InputText class="form-control" @bind-Value="customerModel.LastName" />
+            </div>
+
+            <div class="mb-2">
+                <label>Email:</label>
+                <InputText class="form-control" @bind-Value="customerModel.Email" />
+            </div>
+
+            <div class="mb-2">
+                <label>Telefon:</label>
+                <InputText class="form-control" @bind-Value="customerModel.Phone" />
+            </div>
+
+            <button class="btn btn-primary me-2" type="submit">@((isEdit ? "Güncelle" : "Ekle"))</button>
+            @if (isEdit)
+            {
+                <button type="button" class="btn btn-secondary" @onclick="CancelEdit">İptal</button>
+            }
+        </EditForm>
+    </div>
+
+    <hr />
+
+    <h4>Müşteri Listesi</h4>
+    <table class="table table-bordered table-striped">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Ad</th>
+                <th>Soyad</th>
+                <th>Email</th>
+                <th>Telefon</th>
+                <th>Kayıt Tarihi</th>
+                <th>İşlemler</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in customers)
+            {
+                <tr>
+                    <td>@c.CustomerID</td>
+                    <td>@c.FirstName</td>
+                    <td>@c.LastName</td>
+                    <td>@c.Email</td>
+                    <td>@c.Phone</td>
+                    <td>@c.JoinDate.ToShortDateString()</td>
+                    <td>
+                        <button class="btn btn-sm btn-warning me-2" @onclick="() => EditCustomer(c)">Düzenle</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteCustomer(c.CustomerID)">Sil</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Customer>? customers;
+    private Customer customerModel = new();
+    private bool isEdit = false;
+
+    // Sayfa ilk açıldığında çalışır
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCustomers();
+    }
+
+    // Listeyi veritabanından çeken yardımcı metot
+    private async Task LoadCustomers()
+    {
+        // 'using' bloğu, işlem bitince veritabanı bağlantısını kapatır
+        using var context = DbFactory.CreateDbContext();
+        customers = await context.Customers.ToListAsync();
+    }
+
+    private async Task SaveCustomer()
+    {
+        using var context = DbFactory.CreateDbContext();
+
+        if (isEdit)
+        {
+            // Güncelleme işlemi
+            context.Customers.Update(customerModel);
+        }
+        else
+        {
+            // Ekleme işlemi
+            customerModel.JoinDate = DateTime.Now;
+            context.Customers.Add(customerModel);
+        }
+
+        await context.SaveChangesAsync();
+
+        // İşlem bitince listeyi yenile ve formu temizle
+        await LoadCustomers();
+        customerModel = new();
+        isEdit = false;
+    }
+
+    private void EditCustomer(Customer c)
+    {
+        // Düzenleme moduna geç, verileri forma kopyala
+        customerModel = new Customer
+            {
+                CustomerID = c.CustomerID,
+                FirstName = c.FirstName,
+                LastName = c.LastName,
+                Email = c.Email,
+                Phone = c.Phone,
+                JoinDate = c.JoinDate
+            };
+        isEdit = true;
+    }
+
+    private async Task DeleteCustomer(int id)
+    {
+        using var context = DbFactory.CreateDbContext();
+        var cust = await context.Customers.FindAsync(id);
+        if (cust != null)
+        {
+            context.Customers.Remove(cust);
+            await context.SaveChangesAsync();
+            await LoadCustomers(); // Listeyi yenile
+        }
+    }
+
+    private void CancelEdit()
+    {
+        customerModel = new();
+        isEdit = false;
+    }
+}
